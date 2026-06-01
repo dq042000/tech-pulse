@@ -98,13 +98,17 @@ async function main() {
   await updateReadme(date);
 }
 
-// 更新 README：列出最近 14 份報告連結。
+// 更新 README：僅列出最近 7 天（含當日）的報告，超過一週的自動移除。
+// 例：今日 6/8 → 顯示 6/2~6/8，6/1 不再列出（檔案仍保留在 reports/）。
 async function updateReadme(latest) {
+  const cutoff = new Date(`${latest}T00:00:00Z`);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 6); // 含當日共 7 天
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
   const files = (await readdir(REPORTS_DIR))
-    .filter((f) => f.endsWith('.md'))
+    .filter((f) => f.endsWith('.md') && f.slice(0, 10) >= cutoffStr) // 檔名為 YYYY-MM-DD，可直接字串比較
     .sort()
-    .reverse()
-    .slice(0, 14);
+    .reverse();
   const list = files.map((f) => `- [${f.replace('.md', '')}](reports/${f})`).join('\n');
   const readmePath = join(ROOT, 'README.md');
   let readme = '';
