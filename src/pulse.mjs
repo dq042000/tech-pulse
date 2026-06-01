@@ -2,7 +2,13 @@
 import { writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fetchHackerNews, fetchLobsters, fetchGitHubTrending, fetchRSS } from './sources.mjs';
+import {
+  fetchHackerNews,
+  fetchLobsters,
+  fetchGitHubTrending,
+  fetchRSS,
+  fetchBnext,
+} from './sources.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REPORTS_DIR = join(ROOT, 'reports');
@@ -57,14 +63,16 @@ async function main() {
   const date = today();
   await mkdir(REPORTS_DIR, { recursive: true });
 
-  const [hn, lobsters, gh, rss] = await Promise.all([
+  const [hn, lobsters, gh, rss, bnext] = await Promise.all([
     fetchHackerNews(10).catch((e) => (console.warn('HN:', e.message), [])),
     fetchLobsters(10).catch((e) => (console.warn('Lobsters:', e.message), [])),
     fetchGitHubTrending(10).catch((e) => (console.warn('GitHub:', e.message), [])),
     fetchRSS(5).catch((e) => (console.warn('RSS:', e.message), [])),
+    fetchBnext(5).catch((e) => (console.warn('Bnext:', e.message), [])),
   ]);
+  const media = [...rss, ...bnext];
 
-  const summary = await summarize([...hn, ...lobsters, ...gh, ...rss]);
+  const summary = await summarize([...hn, ...lobsters, ...gh, ...media]);
 
   const body = [
     `# 科技脈動 · ${date}`,
@@ -76,7 +84,7 @@ async function main() {
     '',
     section('⭐ GitHub Trending（近一週）', gh),
     '',
-    section('📰 技術媒體', rss),
+    section('📰 技術媒體', media),
     '',
     `---\n_自動產生於 ${new Date().toISOString()}_`,
   ]

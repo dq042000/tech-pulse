@@ -61,6 +61,30 @@ export async function fetchGitHubTrending(limit = 10) {
   }));
 }
 
+// 數位時代（bnext）無 RSS，僅提供 sitemap（純 URL）。
+// 流程：sitemap index → 取最新 chunk → 取 ID 最大（最新）的數篇 → 各頁抓 og:title。
+export async function fetchBnext(limit = 5) {
+  const index = await getText('https://www.bnext.com.tw/feed/sitemap.xml');
+  const chunks = [...index.matchAll(/article\/(\d+)\.xml/g)].map((m) => Number(m[1]));
+  if (!chunks.length) return [];
+  const lastChunk = Math.max(...chunks);
+  const chunkXml = await getText(`https://www.bnext.com.tw/feed/article/${lastChunk}.xml`);
+  const urls = [...chunkXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).slice(-limit);
+
+  const items = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const html = await getText(url);
+        const title = (html.match(/<meta property="og:title" content="([^"]+)"/i) || [])[1];
+        return title ? { title: title.trim(), url, meta: '數位時代' } : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return items.filter(Boolean).reverse(); // 最新在前
+}
+
 // 極簡 RSS/Atom 解析：同時支援 <item>（RSS）與 <entry>（Atom），不依賴外部套件。
 function parseRSS(xml, limit) {
   const items = [];
