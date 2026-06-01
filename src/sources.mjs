@@ -42,22 +42,85 @@ export async function fetchLobsters(limit = 10) {
   }));
 }
 
-// GitHub 近一週新建、星數最高的 repo（用 Search API，免額外金鑰；
-// Actions 環境會帶 GITHUB_TOKEN 以提高速率上限）。
+// GitHub API 共用標頭（Actions 環境會帶 GITHUB_TOKEN 以提高速率上限）。
+function githubHeaders() {
+  const headers = { Accept: 'application/vnd.github+json' };
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  return headers;
+}
+
+// GitHub 近一週新建、星數最高的 repo（用 Search API，免額外金鑰）。
 export async function fetchGitHubTrending(limit = 10) {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
-  const headers = { Accept: 'application/vnd.github+json' };
-  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   const data = await getJSON(
     `https://api.github.com/search/repositories?q=created:>${since}&sort=stars&order=desc&per_page=${limit}`,
-    headers
+    githubHeaders()
   );
   return (data.items || []).map((repo) => ({
     title: `${repo.full_name}${repo.language ? ` (${repo.language})` : ''}`,
     url: repo.html_url,
     meta: `★ ${repo.stargazers_count} · ${repo.description || '（無描述）'}`.slice(0, 160),
+  }));
+}
+
+// 關注清單：追蹤這些 repo 的新版本。要增減直接改這份清單即可。
+const WATCHED_REPOS = [
+  'nodejs/node',
+  'oven-sh/bun',
+  'denoland/deno',
+  'microsoft/TypeScript',
+  'facebook/react',
+  'vercel/next.js',
+];
+
+// 各 repo 的最新 release，只保留近 7 天內發布的（避免每天重複列出舊版本）。
+export async function fetchGitHubReleases(repos = WATCHED_REPOS) {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const results = await Promise.all(
+    repos.map(async (repo) => {
+      try {
+        const rel = await getJSON(
+          `https://api.github.com/repos/${repo}/releases/latest`,
+          githubHeaders()
+        );
+        if (!rel.published_at || new Date(rel.published_at).getTime() < cutoff) return null;
+        return {
+          title: `${repo} ${rel.tag_name || rel.name || ''}`.trim(),
+          url: rel.html_url,
+          meta: `發布於 ${rel.published_at.slice(0, 10)}`,
+        };
+      } catch {
+        return null; // 無 release 或僅有 pre-release 會回 404，略過。
+      }
+    })
+  );
+  return results.filter(Boolean);
+}
+
+// arXiv 最新 AI 論文（官方 Atom API），預設 cs.AI。
+export async function fetchArxiv(category = 'cs.AI', limit = 5) {
+  const xml = await getText(
+    `http://export.arxiv.org/api/query?search_query=cat:${category}&sortBy=submittedDate&sortOrder=descending&max_results=${limit}`
+  );
+  // arXiv 標題常含換行與多餘空白，壓成單行。
+  return parseRSS(xml, limit).map((it) => ({
+    ...it,
+    title: it.title.replace(/\s+/g, ' ').trim(),
+    meta: 'arXiv',
+  }));
+}
+
+// Dev.to 熱門技術文章（官方 JSON API）。
+export async function fetchDevto(limit = 8) {
+  const items = await getJSON(`https://dev.to/api/articles?top=1&per_page=${limit}`);
+  return items.map((it) => ({
+    title: it.title,
+    url: it.url,
+    meta: `♥ ${it.positive_reactions_count ?? 0}${
+      it.tag_list?.length ? ` · ${it.tag_list.slice(0, 3).join(', ')}` : ''
+    }`,
   }));
 }
 
@@ -85,6 +148,16 @@ export async function fetchBnext(limit = 5) {
   return items.filter(Boolean).reverse(); // 最新在前
 }
 
+// 解碼常見 HTML 實體（RSS link 常含 &amp;，markdown 連結需還原成 &）。
+function decodeEntities(s) {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'");
+}
+
 // 極簡 RSS/Atom 解析：同時支援 <item>（RSS）與 <entry>（Atom），不依賴外部套件。
 function parseRSS(xml, limit) {
   const items = [];
@@ -96,7 +169,9 @@ function parseRSS(xml, limit) {
     const link =
       (block.match(/<link[^>]*href=["']([^"']+)["']/i) || [])[1] ||
       (block.match(/<link>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/link>/is) || [])[1];
-    if (title && link) items.push({ title: title.trim(), url: link.trim(), meta: '' });
+    if (title && link) {
+      items.push({ title: decodeEntities(title.trim()), url: decodeEntities(link.trim()), meta: '' });
+    }
   }
   return items;
 }
@@ -105,6 +180,8 @@ const RSS_FEEDS = [
   { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
   { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
   { name: 'iThome', url: 'https://www.ithome.com.tw/rss' },
+  { name: 'INSIDE', url: 'https://www.inside.com.tw/feed/rss' },
+  { name: 'TechOrange', url: 'https://buzzorange.com/techorange/feed/' },
 ];
 
 export async function fetchRSS(limit = 5) {

@@ -6,6 +6,9 @@ import {
   fetchHackerNews,
   fetchLobsters,
   fetchGitHubTrending,
+  fetchGitHubReleases,
+  fetchArxiv,
+  fetchDevto,
   fetchRSS,
   fetchBnext,
 } from './sources.mjs';
@@ -63,16 +66,19 @@ async function main() {
   const date = today();
   await mkdir(REPORTS_DIR, { recursive: true });
 
-  const [hn, lobsters, gh, rss, bnext] = await Promise.all([
+  const [hn, lobsters, gh, releases, arxiv, devto, rss, bnext] = await Promise.all([
     fetchHackerNews(10).catch((e) => (console.warn('HN:', e.message), [])),
     fetchLobsters(10).catch((e) => (console.warn('Lobsters:', e.message), [])),
     fetchGitHubTrending(10).catch((e) => (console.warn('GitHub:', e.message), [])),
+    fetchGitHubReleases().catch((e) => (console.warn('Releases:', e.message), [])),
+    fetchArxiv('cs.AI', 5).catch((e) => (console.warn('arXiv:', e.message), [])),
+    fetchDevto(8).catch((e) => (console.warn('Dev.to:', e.message), [])),
     fetchRSS(5).catch((e) => (console.warn('RSS:', e.message), [])),
     fetchBnext(5).catch((e) => (console.warn('Bnext:', e.message), [])),
   ]);
   const media = [...rss, ...bnext];
 
-  const summary = await summarize([...hn, ...lobsters, ...gh, ...media]);
+  const summary = await summarize([...hn, ...lobsters, ...gh, ...arxiv, ...devto, ...media]);
 
   const body = [
     `# 科技脈動 · ${date}`,
@@ -83,6 +89,12 @@ async function main() {
     section('🦞 Lobsters 熱門', lobsters),
     '',
     section('⭐ GitHub Trending（近一週）', gh),
+    '',
+    section('🚀 GitHub Releases（近一週）', releases),
+    '',
+    section('📄 arXiv cs.AI 最新論文', arxiv),
+    '',
+    section('✍️ Dev.to 熱門', devto),
     '',
     section('📰 技術媒體', media),
     '',
