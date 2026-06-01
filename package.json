@@ -1,0 +1,13 @@
+{
+  "name": "tech-pulse",
+  "version": "1.0.0",
+  "description": "每日科技脈動報告：自動彙整 Hacker News、GitHub Trending 與技術 RSS",
+  "type": "module",
+  "scripts": {
+    "pulse": "node src/pulse.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
