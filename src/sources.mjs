@@ -32,6 +32,16 @@ export async function fetchHackerNews(limit = 10) {
     }));
 }
 
+// Lobsters 熱門，官方 JSON API，免金鑰。
+export async function fetchLobsters(limit = 10) {
+  const items = await getJSON('https://lobste.rs/hottest.json');
+  return items.slice(0, limit).map((it) => ({
+    title: it.title,
+    url: it.url || it.comments_url,
+    meta: `${it.score ?? 0} 分 · ${it.comment_count ?? 0} 則討論`,
+  }));
+}
+
 // GitHub 近一週新建、星數最高的 repo（用 Search API，免額外金鑰；
 // Actions 環境會帶 GITHUB_TOKEN 以提高速率上限）。
 export async function fetchGitHubTrending(limit = 10) {
@@ -70,6 +80,7 @@ function parseRSS(xml, limit) {
 const RSS_FEEDS = [
   { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
   { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
+  { name: 'iThome', url: 'https://www.ithome.com.tw/rss' },
 ];
 
 export async function fetchRSS(limit = 5) {
