@@ -11,6 +11,7 @@ import {
   fetchDevto,
   fetchRSS,
   fetchBnext,
+  fetchInfosec,
 } from './sources.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,7 +67,7 @@ async function main() {
   const date = today();
   await mkdir(REPORTS_DIR, { recursive: true });
 
-  const [hn, lobsters, gh, releases, arxiv, devto, rss, bnext] = await Promise.all([
+  const [hn, lobsters, gh, releases, arxiv, devto, rss, bnext, infosec] = await Promise.all([
     fetchHackerNews(10).catch((e) => (console.warn('HN:', e.message), [])),
     fetchLobsters(10).catch((e) => (console.warn('Lobsters:', e.message), [])),
     fetchGitHubTrending(10).catch((e) => (console.warn('GitHub:', e.message), [])),
@@ -75,8 +76,9 @@ async function main() {
     fetchDevto(8).catch((e) => (console.warn('Dev.to:', e.message), [])),
     fetchRSS(5).catch((e) => (console.warn('RSS:', e.message), [])),
     fetchBnext(5).catch((e) => (console.warn('Bnext:', e.message), [])),
+    fetchInfosec(5).catch((e) => (console.warn('Infosec:', e.message), [])),
   ]);
-  const media = [...rss, ...bnext];
+  const media = [...rss, ...bnext, ...infosec];
 
   const summary = await summarize([...hn, ...lobsters, ...gh, ...arxiv, ...devto, ...media]);
 

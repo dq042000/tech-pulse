@@ -185,6 +185,33 @@ export async function fetchBnext(limit = 5) {
   return out;
 }
 
+// 資安人（informationsecurity.com.tw）：無 RSS，文章為 article_detail.aspx?aid=N（連號）。
+// 流程：抓首頁取最大的數個 aid（即最新）→ 各頁抓 <h1 class="title_content"> 標題。
+async function fetchInfosec(limit = 5) {
+  const BASE = 'https://www.informationsecurity.com.tw';
+  const home = await getText(`${BASE}/main/index.aspx`);
+  const aids = [
+    ...new Set([...home.matchAll(/article_detail\.aspx\?aid=(\d+)/g)].map((m) => Number(m[1]))),
+  ]
+    .sort((a, b) => b - a)
+    .slice(0, limit);
+  const items = await Promise.all(
+    aids.map(async (aid) => {
+      const url = `${BASE}/article/article_detail.aspx?aid=${aid}`;
+      try {
+        const html = await getText(url);
+        const title = (html.match(/<h1[^>]*class="[^"]*title_content[^"]*"[^>]*>([^<]+)<\/h1>/i) || [])[1];
+        return title ? { title: decodeEntities(title.trim()), url, meta: '資安人' } : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return items.filter(Boolean);
+}
+
+export { fetchInfosec };
+
 // 解碼常見 HTML 實體（RSS link 常含 &amp;，markdown 連結需還原成 &）。
 function decodeEntities(s) {
   return s
