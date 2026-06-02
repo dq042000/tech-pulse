@@ -124,28 +124,65 @@ export async function fetchDevto(limit = 8) {
   }));
 }
 
-// 數位時代（bnext）無 RSS，僅提供 sitemap（純 URL）。
+// 逐頁抓 og:title，組成統一格式項目。meta 用來標示子來源（如「數位時代 · AI」）。
+async function fetchBnextTitles(urls, meta) {
+  const items = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const html = await getText(url);
+        const title = (html.match(/<meta property="og:title" content="([^"]+)"/i) || [])[1];
+        return title ? { title: title.trim(), url, meta } : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return items.filter(Boolean);
+}
+
+// 數位時代（bnext）全站最新：無 RSS，僅提供 sitemap（純 URL）。
 // 流程：sitemap index → 取最新 chunk → 取 ID 最大（最新）的數篇 → 各頁抓 og:title。
-export async function fetchBnext(limit = 5) {
+async function fetchBnextLatest(limit = 5) {
   const index = await getText('https://www.bnext.com.tw/feed/sitemap.xml');
   const chunks = [...index.matchAll(/article\/(\d+)\.xml/g)].map((m) => Number(m[1]));
   if (!chunks.length) return [];
   const lastChunk = Math.max(...chunks);
   const chunkXml = await getText(`https://www.bnext.com.tw/feed/article/${lastChunk}.xml`);
   const urls = [...chunkXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).slice(-limit);
+  return (await fetchBnextTitles(urls, '數位時代')).reverse(); // 最新在前
+}
 
-  const items = await Promise.all(
-    urls.map(async (url) => {
-      try {
-        const html = await getText(url);
-        const title = (html.match(/<meta property="og:title" content="([^"]+)"/i) || [])[1];
-        return title ? { title: title.trim(), url, meta: '數位時代' } : null;
-      } catch {
-        return null;
-      }
-    })
-  );
-  return items.filter(Boolean).reverse(); // 最新在前
+// 數位時代 AI 分類頁：直接從 HTML 取出文章連結（頁面順序即最新/精選在前）。
+async function fetchBnextAI(limit = 5) {
+  const html = await getText('https://www.bnext.com.tw/categories/ai');
+  const seen = new Set();
+  const urls = [];
+  // 要求 ID 後帶 slug，排除無 slug 的導覽/頁尾固定連結（如授權規範頁）。
+  for (const m of html.matchAll(/https:\/\/www\.bnext\.com\.tw\/article\/(\d+)\/[^"']+/g)) {
+    const id = m[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    urls.push(m[0]);
+    if (urls.length >= limit) break;
+  }
+  return fetchBnextTitles(urls, '數位時代 · AI');
+}
+
+// 合併全站最新與 AI 分類，依文章 ID 去重（同一篇只留一個來源標示）。
+export async function fetchBnext(limit = 5) {
+  const [latest, ai] = await Promise.all([
+    fetchBnextLatest(limit).catch(() => []),
+    fetchBnextAI(limit).catch(() => []),
+  ]);
+  const seen = new Set();
+  const out = [];
+  for (const it of [...ai, ...latest]) {
+    const id = (it.url.match(/\/article\/(\d+)/) || [])[1] || it.url;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(it);
+  }
+  return out;
 }
 
 // 解碼常見 HTML 實體（RSS link 常含 &amp;，markdown 連結需還原成 &）。
