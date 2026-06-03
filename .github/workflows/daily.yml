@@ -27,6 +27,8 @@ jobs:
         run: npm run pulse
 
       - name: 自動 commit
+        env:
+          TZ: Asia/Taipei
         run: |
           git config user.name "dq042000"
           git config user.email "7939291+dq042000@users.noreply.github.com"
@@ -34,6 +36,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "今日無變更"
           else
-            git commit -m "chore: 科技脈動報告 $(TZ=Asia/Taipei date +%F)"
+            git commit -m "chore: 科技脈動報告 $(date +%F)"
             git push
           fi
